@@ -47,6 +47,9 @@ add_executable(hello_lvgl src/main.c)
 target_include_directories(hello_lvgl PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${lvgl_SOURCE_DIR}
+    # Allow `#include "lvgl/lvgl.h"` and `#include "lvgl/src/..."` by
+    # putting the parent of the fetched lvgl dir on the include path.
+    ${lvgl_SOURCE_DIR}/..
 )
 
 # LVGL v9.2 ships a separate linux backend target when built with the above flags.
