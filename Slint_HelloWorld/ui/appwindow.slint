@@ -1,0 +1,21 @@
+export component AppWindow inherits Window {
+    width: 320px;
+    height: 170px;
+    background: black;
+    default-font-size: 14px;
+
+    Text {
+        text: "Hello, CardputerZero";
+        color: white;
+        x: (parent.width - self.width) / 2;
+        y: 40px;
+    }
+
+    Text {
+        text: "Press ESC to quit";
+        color: #888;
+        font-size: 10px;
+        x: 8px;
+        y: 150px;
+    }
+}
