@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-install -D -m 0755 build/nes-emulator "$APP_INSTALL_DIR/nes-emulator"
+install -D -m 0755 build/nes-emulator "$STAGE$APP_INSTALL_DIR/nes-emulator"
 
 if [[ -d roms ]]; then
-    mkdir -p "$APP_INSTALL_DIR/roms"
+    mkdir -p "$STAGE$APP_INSTALL_DIR/roms"
     # Copy only the README; do not ship ROM files.
     if [[ -f roms/README.md ]]; then
-        cp roms/README.md "$APP_INSTALL_DIR/roms/README.md"
+        cp roms/README.md "$STAGE$APP_INSTALL_DIR/roms/README.md"
     fi
 fi
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-install -D -m 0755 asteroids "$APP_INSTALL_DIR/asteroids"
+install -D -m 0755 asteroids "$STAGE$APP_INSTALL_DIR/asteroids"
 
 cat >"$STAGE$INSTALL_PREFIX/bin/$PKG_NAME" <<'EOF'
 #!/bin/sh

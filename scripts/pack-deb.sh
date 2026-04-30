@@ -121,10 +121,7 @@ fi
 # 4. Run example's stage.sh to place binaries/assets
 if [[ -x "$PKG_DIR/stage.sh" ]]; then
     echo "-- stage.sh"
-    STAGE="$STAGE" \
-    INSTALL_PREFIX="$INSTALL_PREFIX" \
-    APP_INSTALL_DIR="$APP_INSTALL_DIR" \
-    PKG_NAME="$PKG_NAME" \
+    export STAGE INSTALL_PREFIX APP_INSTALL_DIR PKG_NAME
     ( cd "$EXAMPLE_DIR" && "$PKG_DIR/stage.sh" )
 else
     echo "error: $PKG_DIR/stage.sh missing or not executable" >&2

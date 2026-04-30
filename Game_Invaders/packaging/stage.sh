@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-install -D -m 0755 invaders "$APP_INSTALL_DIR/invaders"
+install -D -m 0755 invaders "$STAGE$APP_INSTALL_DIR/invaders"
 
 cat >"$STAGE$INSTALL_PREFIX/bin/$PKG_NAME" <<'EOF'
 #!/bin/sh

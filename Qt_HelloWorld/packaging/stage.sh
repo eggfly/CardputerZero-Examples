@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-install -D -m 0755 build/hello_qt "$APP_INSTALL_DIR/hello_qt"
+install -D -m 0755 build/hello_qt "$STAGE$APP_INSTALL_DIR/hello_qt"
 
 cat >"$STAGE$INSTALL_PREFIX/bin/$PKG_NAME" <<'EOF'
 #!/bin/sh

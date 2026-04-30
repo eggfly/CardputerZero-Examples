@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-install -D -m 0755 hello_sdl2 "$APP_INSTALL_DIR/hello_sdl2"
+install -D -m 0755 hello_sdl2 "$STAGE$APP_INSTALL_DIR/hello_sdl2"
 
 cat >"$STAGE$INSTALL_PREFIX/bin/$PKG_NAME" <<'EOF'
 #!/bin/sh
