@@ -74,3 +74,32 @@ Testing/
 # deb packaging output
 dist/
 *.deb
+
+# python byte cache
+__pycache__/
+*.pyc
+*.pyo
+
+# per-example built binaries (in case builds happen inside the working tree)
+Demo_Clock/clock
+Demo_2048/demo2048
+Demo_Matrix/matrix
+Demo_MusicSpectrum/spectrum
+FrameBuffer_HelloWorld/hello_fb
+FrameBuffer_Game/snake_fb
+Game_Tetris/tetris
+Game_Minesweeper/minesweeper
+Game_Sokoban/sokoban
+Game_Pong/pong
+Game_Flappy/flappy
+Game_LunarLander/lander
+Game_Invaders/invaders
+Game_Asteroids/asteroids
+Game_TicTacToe/tictactoe
+SDL2_HelloWorld/hello_sdl2
+SDL2_Game/breakout
+Qt_HelloWorld/hello_qt
+LVGL_HelloWorld/hello_lvgl
+Rust_FrameBuffer_HelloWorld/target/
+Slint_HelloWorld/target/
+NES_Emulator/nes-emulator
