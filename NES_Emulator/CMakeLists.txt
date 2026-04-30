@@ -14,8 +14,8 @@ include(FetchContent)
 # No tagged releases exist, so we pin the HEAD of the default branch at the
 # time this file was written. Update the hash to re-pin.
 # --------------------------------------------------------------------------
-set(LAINES_GIT_TAG "6b057f9b08a27bce00fa13ac9f77e64f99b65be5"
-    CACHE STRING "LaiNES commit to fetch")
+set(LAINES_GIT_TAG "1f3d126171104ec57e515641ea3b5291d383ebdf"
+    CACHE STRING "LaiNES commit to fetch (master @ 2025-11-06)")
 
 FetchContent_Declare(
     laines

@@ -17,10 +17,14 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(lvgl)
 
 # Tell LVGL to use our lv_conf.h via simple include.
+# Disable LVGL's Helium SIMD assembly path — its .S sources fail to
+# assemble on ubuntu-24.04-arm's default binutils; plain C path is fine
+# for CM0's performance envelope.
 target_compile_definitions(lvgl PUBLIC
     LV_CONF_INCLUDE_SIMPLE=1
     LV_USE_LINUX_FBDEV=1
     LV_USE_LINUX_EVDEV=1
+    LV_DRAW_SW_ASM=LV_DRAW_SW_ASM_NONE
 )
 
 # Make our lv_conf.h visible to LVGL and to this project.

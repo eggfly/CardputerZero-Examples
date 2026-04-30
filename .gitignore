@@ -48,7 +48,10 @@ build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
+# Only ignore CMake-generated Makefiles (inside build dirs),
+# not the hand-written Makefiles that live next to each example's sources.
+build/Makefile
+build-*/Makefile
 install_manifest.txt
 compile_commands.json
 
@@ -71,13 +74,3 @@ Testing/
 # deb packaging output
 dist/
 *.deb
-
-# do NOT ignore hand-written Makefiles inside examples
-!FrameBuffer_HelloWorld/Makefile
-!FrameBuffer_Game/Makefile
-!SDL2_HelloWorld/Makefile
-!SDL2_Game/Makefile
-!Demo_Clock/Makefile
-!Demo_2048/Makefile
-!Demo_Matrix/Makefile
-!Demo_MusicSpectrum/Makefile
