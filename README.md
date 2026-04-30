@@ -45,6 +45,16 @@ Driver overlays: <https://github.com/m5stack/m5stack-linux-dtoverlays/tree/main/
 | [Demo_Matrix](./Demo_Matrix) | C / fb | ✅ | Matrix-rain screensaver. |
 | [Demo_MarkdownReader](./Demo_MarkdownReader) | Python + Pillow | ✅ | Paged plain-text reader. |
 | [Demo_MusicSpectrum](./Demo_MusicSpectrum) | C / ALSA + fb | 📄 skeleton | ALSA capture loop done; FFT + render TODO. |
+| [Game_Tetris](./Game_Tetris) | C / fb | ✅ | 10×17 grid, SRS-lite rotation, hard drop. |
+| [Game_Minesweeper](./Game_Minesweeper) | C / fb | ✅ | 20×14 board, 16 mines, flag/reveal. |
+| [Game_Sokoban](./Game_Sokoban) | C / fb | ✅ | 3 built-in levels with undo. |
+| [Game_Pong](./Game_Pong) | C / fb | ✅ | Human vs CPU, first to 10. |
+| [Game_Flappy](./Game_Flappy) | C / fb | ✅ | Flappy Bird clone with pipe gaps. |
+| [Game_LunarLander](./Game_LunarLander) | C / fb | ✅ | Thrust/rotate/gravity, 2 bonus pads. |
+| [Game_Invaders](./Game_Invaders) | C / SDL2 | ✅ | Simplified Space Invaders 5×8 grid. |
+| [Game_Asteroids](./Game_Asteroids) | C / SDL2 | ✅ | Vector asteroids, wraparound edges. |
+| [Game_TicTacToe](./Game_TicTacToe) | C / SDL2 | ✅ | Keyboard cursor + minimax CPU. |
+| [NES_Emulator](./NES_Emulator) | C++ / SDL2 + LaiNES | ✅ | 320×170 viewport: `scaletoheight` letterbox (default) or `cropheight` 1.25× stretch; `V` toggles. |
 
 Legend: ✅ runnable · 📄 doc / skeleton only
 

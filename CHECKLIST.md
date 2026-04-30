@@ -66,6 +66,19 @@
 - [x] **E9. Demo_ImageViewer**（Python + Pillow）
 - [x] **E10. Demo_Matrix**（C 屏保 Matrix rain）
 
+### E+ 经典游戏移植（320×170 + 键盘友好）
+
+- [x] **G1. Game_Tetris**（C / fb，10×17 网格）
+- [x] **G2. Game_Minesweeper**（C / fb，20×14 + HUD）
+- [x] **G3. Game_Sokoban**（C / fb，3 关内建关卡 + Undo）
+- [x] **G4. Game_Pong**（C / fb，人 vs CPU）
+- [x] **G5. Game_Flappy**（C / fb，Flappy Bird 克隆）
+- [x] **G6. Game_LunarLander**（C / fb，推力+旋转+重力）
+- [x] **G7. Game_Invaders**（SDL2 软渲，简化 Space Invaders）
+- [x] **G8. Game_Asteroids**（SDL2 软渲，向量风格）
+- [x] **G9. Game_TicTacToe**（SDL2 软渲，Minimax CPU）
+- [x] **G10. NES_Emulator**（SDL2 + LaiNES；`scaletoheight` 181×170 信箱 / `cropheight` 320×170 拉伸裁切；`V` 键切换）
+
 ### F. 构建与部署基础设施
 
 - [x] **F1. 根 `README.md` 索引**（按表格列出每个 example 的状态 / 技术栈 / 依赖）
