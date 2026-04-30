@@ -9,9 +9,9 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include "lvgl/lvgl.h"
-#include "lvgl/src/drivers/display/fb/lv_linux_fbdev.h"
-#include "lvgl/src/drivers/evdev/lv_linux_evdev.h"
+#include "lvgl.h"
+#include "src/drivers/display/fb/lv_linux_fbdev.h"
+#include "src/drivers/evdev/lv_evdev.h"
 
 static uint32_t g_click_count = 0;
 static lv_obj_t *g_count_label = NULL;
@@ -103,11 +103,11 @@ int main(void)
     lv_display_set_resolution(disp, 320, 170);
 
     /* Keypad input (evdev). Try event0 first, then scan. */
-    lv_indev_t *indev = lv_linux_evdev_create(LV_INDEV_TYPE_KEYPAD, "/dev/input/event0");
+    lv_indev_t *indev = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, "/dev/input/event0");
     if (!indev) {
         char path[64];
         if (find_keypad_event_path(path, sizeof(path)) == 0) {
-            indev = lv_linux_evdev_create(LV_INDEV_TYPE_KEYPAD, path);
+            indev = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, path);
             if (indev) fprintf(stderr, "evdev: using %s\n", path);
         }
     }
