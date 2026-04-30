@@ -23,6 +23,10 @@
 
 #define LV_DEF_REFR_PERIOD        16
 
+/* Disable Helium/ARM SIMD assembly backend; upstream .S file fails to
+ * assemble on ubuntu-24.04-arm's stock binutils. Plain C path is fine. */
+#define LV_USE_DRAW_SW_ASM        LV_DRAW_SW_ASM_NONE
+
 #define LV_USE_LOG                0
 
 #ifndef LV_USE_LINUX_FBDEV

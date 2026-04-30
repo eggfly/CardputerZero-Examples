@@ -22,6 +22,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/AndreaOrru/LaiNES.git
     GIT_TAG        ${LAINES_GIT_TAG}
     GIT_SHALLOW    FALSE
+    GIT_SUBMODULES_RECURSE TRUE
 )
 
 FetchContent_GetProperties(laines)
@@ -29,23 +30,28 @@ if(NOT laines_POPULATED)
     FetchContent_Populate(laines)
 endif()
 
-# LaiNES ships a Makefile only. Build its sources into a static library here,
-# excluding the upstream SDL frontend (src/main.cpp and src/gui.cpp) so we can
-# substitute our own 320x170-aware frontend.
-file(GLOB_RECURSE LAINES_SOURCES CONFIGURE_DEPENDS
+# LaiNES ships an SConstruct only. Build its sources into a static library
+# here, excluding the upstream SDL frontend (src/main.cpp + src/gui.cpp +
+# src/menu.cpp + src/config.cpp) so we can substitute our own 320x170 UI.
+# Also include the Nes_Snd_Emu sources under lib/*.cpp (the APU backend).
+file(GLOB LAINES_SRC_CPP CONFIGURE_DEPENDS
     "${laines_SOURCE_DIR}/src/*.cpp"
     "${laines_SOURCE_DIR}/src/mappers/*.cpp")
+file(GLOB LAINES_LIB_CPP CONFIGURE_DEPENDS
+    "${laines_SOURCE_DIR}/lib/*.cpp")
+set(LAINES_SOURCES ${LAINES_SRC_CPP} ${LAINES_LIB_CPP})
 
 list(FILTER LAINES_SOURCES EXCLUDE REGEX ".*/src/main\\.cpp$")
 list(FILTER LAINES_SOURCES EXCLUDE REGEX ".*/src/gui\\.cpp$")
 list(FILTER LAINES_SOURCES EXCLUDE REGEX ".*/src/menu\\.cpp$")
+list(FILTER LAINES_SOURCES EXCLUDE REGEX ".*/src/config\\.cpp$")
 
 add_library(laines_core STATIC ${LAINES_SOURCES})
 
 target_include_directories(laines_core PUBLIC
-    "${laines_SOURCE_DIR}/include"
+    "${laines_SOURCE_DIR}/src/include"
     "${laines_SOURCE_DIR}/lib/include"
-    "${laines_SOURCE_DIR}/lib/Nes_Snd_Emu-0.1.7")
+    "${laines_SOURCE_DIR}/simpleini")
 
 target_compile_options(laines_core PRIVATE -w -fpermissive)
 

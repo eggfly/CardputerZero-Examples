@@ -6,6 +6,13 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
+# Disable LVGL's Helium SIMD assembly path BEFORE FetchContent_MakeAvailable —
+# its .S sources fail to assemble on ubuntu-24.04-arm's default binutils.
+# LVGL's CMakeLists reads these cache variables during configure.
+set(LV_USE_OS        "NONE" CACHE STRING "" FORCE)
+set(LV_USE_DRAW_SW_ASM 0     CACHE BOOL   "" FORCE)
+set(LV_USE_NEMA_GFX  0       CACHE BOOL   "" FORCE)
+
 # Fetch LVGL v9.2.2. Do not vendor the source tree.
 FetchContent_Declare(
     lvgl
@@ -17,14 +24,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(lvgl)
 
 # Tell LVGL to use our lv_conf.h via simple include.
-# Disable LVGL's Helium SIMD assembly path — its .S sources fail to
-# assemble on ubuntu-24.04-arm's default binutils; plain C path is fine
-# for CM0's performance envelope.
 target_compile_definitions(lvgl PUBLIC
     LV_CONF_INCLUDE_SIMPLE=1
     LV_USE_LINUX_FBDEV=1
     LV_USE_LINUX_EVDEV=1
-    LV_DRAW_SW_ASM=LV_DRAW_SW_ASM_NONE
 )
 
 # Make our lv_conf.h visible to LVGL and to this project.

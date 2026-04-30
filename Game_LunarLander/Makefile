@@ -1,5 +1,5 @@
 CC      ?= gcc
-CFLAGS  ?= -O2 -Wall -Wextra -std=c11
+CFLAGS  ?= -O2 -Wall -Wextra -std=gnu11
 LDLIBS   = -lm
 TARGET   = lander
 OBJS     = main.o fb.o input.o
