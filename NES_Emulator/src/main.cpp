@@ -127,6 +127,9 @@ u8 get_joypad_state(int n) {
     return (n == 0) ? g.pad1 : g.pad2;
 }
 
+// Required by apu.cpp: we never fast-forward in this embedded frontend.
+bool is_fast_forward() { return false; }
+
 // Some forks reference these; provide weak-ish stubs.
 void set_size(int) {}
 void run() {}

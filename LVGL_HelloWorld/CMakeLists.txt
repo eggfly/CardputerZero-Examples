@@ -23,6 +23,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(lvgl)
 
+# LVGL v9.2.2's CMakeLists unconditionally globs src/**/*.S, pulling in
+# lv_blend_helium.S which fails to assemble on ubuntu-24.04-arm (plain
+# binutils, no -mfpu=auto). Strip .S from the target's sources post-hoc.
+get_target_property(_lvgl_src lvgl SOURCES)
+if(_lvgl_src)
+    list(FILTER _lvgl_src EXCLUDE REGEX "\\.S$")
+    set_target_properties(lvgl PROPERTIES SOURCES "${_lvgl_src}")
+endif()
+
 # Tell LVGL to use our lv_conf.h via simple include.
 target_compile_definitions(lvgl PUBLIC
     LV_CONF_INCLUDE_SIMPLE=1
