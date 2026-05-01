@@ -4,6 +4,10 @@ export component AppWindow inherits Window {
     background: black;
     default-font-size: 14px;
 
+    // Route keyboard events to the FocusScope below so ESC reaches us
+    // even before any child widget gets focus.
+    forward-focus: fs;
+
     // Signal fired when the user wants to quit (Esc / Q).
     callback quit();
 

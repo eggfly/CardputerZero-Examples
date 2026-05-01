@@ -12,8 +12,11 @@
  */
 
 #include <alsa/asoundlib.h>
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <math.h>
 #include <signal.h>
 #include <stdint.h>
@@ -26,6 +29,10 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+
+#define BITS_PER_LONG (8 * (int)sizeof(long))
+#define NBITS(x) (((x) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+#define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
 
 #include "font8x8_basic.h"
 
@@ -127,25 +134,115 @@ static void fb_close_blank(void) {
     }
 }
 
-/* ---------- stdin key helper ---------- */
+/* ---------- key helpers (evdev + stdin fallback) ---------- */
+
+/* Open an evdev keypad device. Matches the logic in Demo_2048 /
+ * Demo_Matrix: env override, Cardputer by-path, then scan rejecting
+ * EV_REL devices (HDMI CEC). Under APPLaunch there is no TTY, so
+ * polling stdin alone never sees a key — we must poll evdev. */
+static int g_kfd = -1;
+
+static int open_keypad(void) {
+    const char *env = getenv("INPUT_DEV");
+    if (env && *env) {
+        int fd = open(env, O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) return fd;
+    }
+    int fd = open("/dev/input/by-path/platform-3f804000.i2c-event",
+                  O_RDONLY | O_NONBLOCK);
+    if (fd >= 0) return fd;
+
+    DIR *d = opendir("/dev/input");
+    if (!d) return -1;
+    struct dirent *e;
+    int best = -1;
+    while ((e = readdir(d)) != NULL) {
+        if (strncmp(e->d_name, "event", 5) != 0) continue;
+        char path[64];
+        snprintf(path, sizeof(path), "/dev/input/%s", e->d_name);
+        int cand = open(path, O_RDONLY | O_NONBLOCK);
+        if (cand < 0) continue;
+
+        unsigned long evbits[NBITS(EV_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(0, sizeof(evbits)), evbits) < 0) {
+            close(cand); continue;
+        }
+        if (!TEST_BIT(EV_KEY, evbits)) { close(cand); continue; }
+        if (TEST_BIT(EV_REL, evbits)) { close(cand); continue; }
+
+        unsigned long keybits[NBITS(KEY_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0 &&
+            (TEST_BIT(KEY_ENTER, keybits) || TEST_BIT(KEY_ESC, keybits))) {
+            best = cand;
+            break;
+        }
+        close(cand);
+    }
+    closedir(d);
+    return best;
+}
+
+/* Drain pending evdev events (e.g. the KEY_ENTER the launcher used to
+ * select this app) so the first key_pressed() call doesn't instantly
+ * report a quit. */
+static void drain_keypad(int kfd) {
+    if (kfd < 0) return;
+    struct input_event ev;
+    while (read(kfd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) { }
+}
+
+/* Poll for a key press. Returns:
+ *   0 = no key, 1 = "any" key (e.g. quit banner), 2 = explicit ESC/Q quit.
+ * Checks the evdev keypad (g_kfd) first, then stdin as a fallback so
+ * dev/testing over SSH still works. */
 static int key_pressed(int timeout_ms) {
     struct timeval tv;
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
     fd_set fds;
     FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    int r = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
-    if (r <= 0) return 0;
-    char buf[8];
-    int n = (int)read(STDIN_FILENO, buf, sizeof(buf));
-    if (n <= 0) return 0;
-    /* treat any key as "quit" when in no-audio fallback; main path also
-     * accepts ESC to quit. */
-    for (int i = 0; i < n; i++) {
-        if (buf[i] == 27 || buf[i] == 'q' || buf[i] == 'Q') return 2;
+    int maxfd = -1;
+    if (g_kfd >= 0) { FD_SET(g_kfd, &fds); if (g_kfd > maxfd) maxfd = g_kfd; }
+    /* Only include stdin if it looks like a TTY / pipe; /dev/null under
+     * APPLaunch is always readable and would spin the select. */
+    if (isatty(STDIN_FILENO)) {
+        FD_SET(STDIN_FILENO, &fds);
+        if (STDIN_FILENO > maxfd) maxfd = STDIN_FILENO;
     }
-    return 1;
+    if (maxfd < 0) {
+        /* No input source at all: sleep the timeout so we don't spin. */
+        if (timeout_ms > 0) {
+            struct timespec ts = { .tv_sec = tv.tv_sec, .tv_nsec = tv.tv_usec * 1000L };
+            nanosleep(&ts, NULL);
+        }
+        return 0;
+    }
+    int r = select(maxfd + 1, &fds, NULL, NULL, &tv);
+    if (r <= 0) return 0;
+    if (g_kfd >= 0 && FD_ISSET(g_kfd, &fds)) {
+        struct input_event ev;
+        int got = 0;
+        while (read(g_kfd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
+            if (ev.type == EV_KEY && ev.value == 1) {
+                if (ev.code == KEY_ESC || ev.code == KEY_Q ||
+                    ev.code == KEY_BACKSPACE) return 2;
+                got = 1;
+            }
+        }
+        if (got) return 1;
+    }
+    if (FD_ISSET(STDIN_FILENO, &fds)) {
+        char buf[8];
+        int n = (int)read(STDIN_FILENO, buf, sizeof(buf));
+        if (n <= 0) return 0;
+        /* treat any key as "quit" when in no-audio fallback; main path also
+         * accepts ESC to quit. */
+        for (int i = 0; i < n; i++) {
+            if (buf[i] == 27 || buf[i] == 'q' || buf[i] == 'Q') return 2;
+        }
+        return 1;
+    }
+    return 0;
 }
 
 /* ---------- ALSA open with fallbacks ---------- */
@@ -332,6 +429,16 @@ int main(void) {
         fprintf(stderr, "framebuffer unavailable; continuing without visuals\n");
     }
 
+    /* Open evdev keypad for quit detection. Under APPLaunch there's no
+     * TTY, so this is the only reliable input path. Drain stale events
+     * (e.g. the launcher's own KEY_ENTER) before entering any poll loop. */
+    g_kfd = open_keypad();
+    if (g_kfd < 0) {
+        fprintf(stderr, "no evdev keypad found; quit via SIGTERM only\n");
+    } else {
+        drain_keypad(g_kfd);
+    }
+
     snd_pcm_t *pcm = NULL;
     char used[128] = {0};
     int rc = open_capture_any(&pcm, used, sizeof(used));
@@ -343,6 +450,7 @@ int main(void) {
             if (k) break;
         }
         if (have_termios) tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        if (g_kfd >= 0) { close(g_kfd); g_kfd = -1; }
         fb_close_blank();
         return 0;
     }
@@ -377,6 +485,7 @@ int main(void) {
 
     if (pcm) snd_pcm_close(pcm);
     if (have_termios) tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    if (g_kfd >= 0) { close(g_kfd); g_kfd = -1; }
     fb_close_blank();
     return 0;
 }

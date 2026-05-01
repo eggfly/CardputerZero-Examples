@@ -43,14 +43,19 @@
 #define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
 
 static uint16_t *fb;
+/* Actual on-device fb dimensions, read from FBIOGET_VSCREENINFO. Using
+ * hardcoded W=320 as the stride segfaults when the real fb is padded or
+ * sized differently (the mmap is v.xres*v.yres*2 bytes). */
+static int fb_w = W;
+static int fb_h = H;
 
 static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
     return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
 
 static void put_pixel(int x, int y, uint16_t c) {
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    fb[y * W + x] = c;
+    if (x < 0 || y < 0 || x >= fb_w || y >= fb_h) return;
+    fb[y * fb_w + x] = c;
 }
 
 static void fill_rect(int x, int y, int w, int h, uint16_t c) {
@@ -127,7 +132,11 @@ static int open_keypad(void) {
     return best;
 }
 
-/* Non-blocking: return 1 if a key press was observed since last call. */
+/* Non-blocking: return 1 if a quit key (ESC, Q, BACKSPACE) was pressed.
+ * Previously this returned 1 on ANY key press, which made the demo exit
+ * instantly under APPLaunch because the launcher's own KEY_ENTER press
+ * (from selecting the app) is still queued on the evdev device when we
+ * open it — resulting in "starts then immediately exits". */
 static int key_pressed(int kfd) {
     if (kfd < 0) return 0;
     struct input_event ev;
@@ -135,7 +144,10 @@ static int key_pressed(int kfd) {
     for (;;) {
         ssize_t n = read(kfd, &ev, sizeof(ev));
         if (n == (ssize_t)sizeof(ev)) {
-            if (ev.type == EV_KEY && ev.value == 1) got = 1;
+            if (ev.type == EV_KEY && ev.value == 1) {
+                if (ev.code == KEY_ESC || ev.code == KEY_Q ||
+                    ev.code == KEY_BACKSPACE) got = 1;
+            }
             continue;
         }
         break;
@@ -148,12 +160,24 @@ int main(void) {
     if (fd < 0) { perror("open fb"); return 1; }
     struct fb_var_screeninfo v;
     if (ioctl(fd, FBIOGET_VSCREENINFO, &v) < 0) { perror("ioctl"); close(fd); return 1; }
+    /* Use real fb dimensions for the stride so put_pixel stays in-bounds. */
+    fb_w = (int)v.xres;
+    fb_h = (int)v.yres;
+    if (fb_w <= 0 || fb_h <= 0) { fprintf(stderr, "bad vinfo %ux%u\n", v.xres, v.yres); close(fd); return 1; }
     size_t bytes = (size_t)v.xres * v.yres * 2;
     fb = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (fb == MAP_FAILED) { perror("mmap"); close(fd); return 1; }
 
     int kfd = open_keypad();
     /* If no keypad, still animate — user can SIGINT / kill to exit. */
+
+    /* Drain any stale events from the launcher (e.g. the KEY_ENTER press
+     * that selected this app), otherwise we'd exit immediately on the
+     * first key_pressed() poll. */
+    if (kfd >= 0) {
+        struct input_event ev;
+        while (read(kfd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) { }
+    }
 
     srand((unsigned)time(NULL));
     for (int i = 0; i < COLS; i++) {

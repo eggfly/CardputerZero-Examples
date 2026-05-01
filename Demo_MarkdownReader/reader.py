@@ -9,6 +9,7 @@ Keys (evdev):
   Esc   / Q                       - quit
 """
 
+import fcntl
 import glob
 import mmap
 import os
@@ -32,6 +33,11 @@ MAX_COLS = 48
 EV_FORMAT = "llHHi"
 EV_SIZE = struct.calcsize(EV_FORMAT)
 EV_KEY = 0x01
+EV_REL = 0x02  # relative axis (pointer). HDMI CEC pseudo-kb often advertises this.
+
+# EVIOCGBIT(0, len) ioctl to query supported event types on a device.
+# _IOC(_IOC_READ, 'E', 0x20, len) = 0x80004520 | (len<<16) on Linux.
+EVIOCGBIT_0 = 0x80004520  # |= (len << 16) below
 
 # Keycodes from <linux/input-event-codes.h>
 KEY_ESC = 1
@@ -46,6 +52,8 @@ KEY_UP = 103
 KEY_DOWN = 108
 KEY_PAGEUP = 104
 KEY_PAGEDOWN = 109
+KEY_HOME = 102
+KEY_END = 107
 
 
 def rgb565(r, g, b):
@@ -102,13 +110,33 @@ def render(page, idx, total, font, font_sm):
     return img
 
 
+def _device_supports(fd, ev_type):
+    """Return True if this evdev node advertises the given EV_* type bit."""
+    try:
+        # 4 bytes is enough to cover EV_KEY(1), EV_REL(2), EV_ABS(3) etc.
+        buf = bytearray(4)
+        ioc = EVIOCGBIT_0 | (len(buf) << 16)
+        fcntl.ioctl(fd, ioc, buf)
+    except OSError:
+        return False
+    bits = int.from_bytes(buf, "little")
+    return bool(bits & (1 << ev_type))
+
+
 def open_input_devices():
-    """Open all /dev/input/event* nodes non-blocking."""
+    """Open evdev nodes non-blocking, preferring the TCA8418 keypad.
+
+    HDMI CEC adapters expose a pseudo-keyboard that also reports EV_REL;
+    reject those so media keys from a TV remote don't hijack our app.
+    Prefer the by-path symlink, fall back to /dev/input/event* scan.
+    """
     fds = []
     env = os.environ.get("INPUT_DEV", "").strip()
     candidates = []
     if env:
         candidates.append(env)
+    # Primary CardputerZero keypad (TCA8418 on i2c).
+    candidates.append("/dev/input/by-path/platform-3f804000.i2c-event")
     candidates.extend(sorted(glob.glob("/dev/input/event*")))
     seen = set()
     for path in candidates:
@@ -122,6 +150,10 @@ def open_input_devices():
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
         except OSError:
+            continue
+        # Must emit key events, must NOT emit relative-axis (pointer) events.
+        if not _device_supports(fd, EV_KEY) or _device_supports(fd, EV_REL):
+            os.close(fd)
             continue
         fds.append(fd)
     return fds
@@ -172,6 +204,8 @@ def main():
 
     next_keys = {KEY_SPACE, KEY_DOWN, KEY_PAGEDOWN, KEY_J, KEY_N}
     prev_keys = {KEY_B, KEY_UP, KEY_PAGEUP, KEY_K, KEY_P}
+    home_keys = {KEY_HOME}
+    end_keys = {KEY_END}
     quit_keys = {KEY_ESC, KEY_Q}
 
     try:
@@ -195,6 +229,14 @@ def main():
                 elif code in prev_keys:
                     if idx > 0:
                         idx -= 1
+                        dirty = True
+                elif code in home_keys:
+                    if idx != 0:
+                        idx = 0
+                        dirty = True
+                elif code in end_keys:
+                    if idx != len(pages) - 1:
+                        idx = len(pages) - 1
                         dirty = True
             if dirty:
                 img = render(pages[idx], idx, len(pages), font, font_sm)

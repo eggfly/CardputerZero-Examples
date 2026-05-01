@@ -5,12 +5,14 @@ Usage: viewer.py <dir>
 Keys: Left/Right prev/next, Esc quit.
 """
 
+import errno
+import grp
 import mmap
 import os
 import select
 import sys
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 FB_DEV = "/dev/fb0"
 W, H = 320, 170
@@ -57,27 +59,122 @@ def load_and_fit(path):
     return canvas
 
 
+def banner_image(lines):
+    canvas = Image.new("RGB", (W, H), (0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    try:
+        font = ImageFont.load_default()
+    except OSError:
+        font = None
+    y = 20
+    for line in lines:
+        draw.text((10, y), line, fill=(255, 255, 255), font=font)
+        y += 16
+    return canvas
+
+
 def read_key():
     dr, _, _ = select.select([sys.stdin], [], [], 0.2)
     if not dr:
         return ""
-    return sys.stdin.read(1)
+    try:
+        return sys.stdin.read(1)
+    except OSError:
+        return ""
+
+
+def groups_of(user):
+    try:
+        return [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
+    except OSError:
+        return []
+
+
+def open_fb():
+    """Open /dev/fb0 O_RDWR; return fd or raise with a clear message."""
+    try:
+        return os.open(FB_DEV, os.O_RDWR)
+    except PermissionError as e:
+        user = os.environ.get("USER") or ""
+        if not user:
+            try:
+                import pwd
+                user = pwd.getpwuid(os.getuid()).pw_name
+            except Exception:
+                user = "?"
+        gs = groups_of(user)
+        print(
+            "ERROR: EACCES opening %s as user=%s (uid=%d). "
+            "Groups for this user: %s. "
+            "Need membership in 'video'. If just added via usermod, the "
+            "session must be restarted (systemctl restart APPLaunch.service). "
+            "NOT re-introducing sudo -- see packaging/README." % (
+                FB_DEV, user, os.getuid(), ",".join(gs) or "(none)"),
+            file=sys.stderr,
+        )
+        raise
+    except FileNotFoundError:
+        print("ERROR: %s does not exist. Is the fbcon driver loaded?" % FB_DEV,
+              file=sys.stderr)
+        raise
+    except OSError as e:
+        print("ERROR: open(%s) failed: errno=%d %s" % (
+            FB_DEV, e.errno or 0, os.strerror(e.errno or 0)), file=sys.stderr)
+        raise
 
 
 def main():
+    # Startup banner (diagnostic; captured by wrapper's log redirect).
+    print(
+        "demo-imgview start: pid=%d uid=%d gid=%d argv=%r" % (
+            os.getpid(), os.getuid(), os.getgid(), sys.argv),
+        file=sys.stderr,
+    )
+    sys.stderr.flush()
+
     if len(sys.argv) < 2:
         print("usage: viewer.py <dir>", file=sys.stderr)
         return 2
-    files = list_images(sys.argv[1])
-    if not files:
-        print("no images found", file=sys.stderr)
-        return 1
 
-    fd = os.open(FB_DEV, os.O_RDWR)
-    mm = mmap.mmap(fd, W * H * BPP, mmap.MAP_SHARED, mmap.PROT_WRITE | mmap.PROT_READ)
+    d = sys.argv[1]
+    files = list_images(d)
+    missing = not os.path.isdir(d)
+    print("demo-imgview: dir=%s missing=%s count=%d" % (d, missing, len(files)),
+          file=sys.stderr)
+    sys.stderr.flush()
 
-    idx = 0
     try:
+        fd = open_fb()
+    except OSError as e:
+        # Already logged a clear message above.
+        return 3 if e.errno == errno.EACCES else 4
+
+    try:
+        mm = mmap.mmap(fd, W * H * BPP, mmap.MAP_SHARED,
+                       mmap.PROT_WRITE | mmap.PROT_READ)
+    except OSError as e:
+        print("ERROR: mmap(%s) failed: %s" % (FB_DEV, e), file=sys.stderr)
+        os.close(fd)
+        return 5
+
+    try:
+        if not files:
+            # Draw a "no images" banner and wait for ESC.
+            msg = "No images found" if not missing else "Missing samples dir"
+            img = banner_image([
+                msg,
+                d if len(d) < 40 else "..." + d[-37:],
+                "Press ESC to quit",
+            ])
+            mm.seek(0)
+            mm.write(image_to_rgb565(img))
+            while True:
+                k = read_key()
+                if k == "\x1b":
+                    break
+            return 0
+
+        idx = 0
         while True:
             img = load_and_fit(files[idx])
             mm.seek(0)

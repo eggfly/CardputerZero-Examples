@@ -28,6 +28,9 @@
 #include "font8x8_basic.h"
 
 #define FB_DEV "/dev/fb0"
+/* Logical design size. Actual on-device fb size is read from vinfo at
+ * startup; we clamp drawing to min(design, vinfo) so oversize hardware
+ * never causes an over-write past the mmap region. */
 #define W 320
 #define H 170
 #define GRID 4
@@ -39,6 +42,11 @@
 #define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
 
 static uint16_t *fb;
+/* Real on-device fb dimensions, populated in main() from FBIOGET_VSCREENINFO.
+ * put_pixel uses fb_w as stride; hardcoded W=320 was wrong when vinfo.xres
+ * differs (e.g. padded fb line_length), causing segfaults on some builds. */
+static int fb_w = W;
+static int fb_h = H;
 static int board[GRID][GRID];
 static int score = 0;
 
@@ -63,8 +71,8 @@ static uint16_t tile_color(int v) {
 }
 
 static void put_pixel(int x, int y, uint16_t c) {
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    fb[y * W + x] = c;
+    if (x < 0 || y < 0 || x >= fb_w || y >= fb_h) return;
+    fb[y * fb_w + x] = c;
 }
 
 static void fill_rect(int x, int y, int w, int h, uint16_t c) {
@@ -285,6 +293,12 @@ int main(void) {
     if (fd < 0) { perror("open fb"); return 1; }
     struct fb_var_screeninfo v;
     if (ioctl(fd, FBIOGET_VSCREENINFO, &v) < 0) { perror("ioctl"); close(fd); return 1; }
+    /* Adopt device-reported size so put_pixel's stride matches the real fb.
+     * Clamp to our design dimensions so off-device builds with a larger fb
+     * still only touch the 320x170 region we actually render into. */
+    fb_w = (int)v.xres;
+    fb_h = (int)v.yres;
+    if (fb_w <= 0 || fb_h <= 0) { fprintf(stderr, "bad vinfo %ux%u\n", v.xres, v.yres); close(fd); return 1; }
     size_t bytes = (size_t)v.xres * v.yres * 2;
     fb = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (fb == MAP_FAILED) { perror("mmap"); close(fd); return 1; }

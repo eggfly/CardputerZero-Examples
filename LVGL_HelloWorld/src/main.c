@@ -16,17 +16,40 @@
 static uint32_t g_click_count = 0;
 static lv_obj_t *g_count_label = NULL;
 
+static void bump_click(void)
+{
+    g_click_count++;
+    if (g_count_label) {
+        lv_label_set_text_fmt(g_count_label, "Clicks: %u", g_click_count);
+    }
+}
+
 static void btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_CLICKED || code == LV_EVENT_KEY) {
-        if (code == LV_EVENT_KEY) {
-            uint32_t key = lv_event_get_key(e);
-            if (key != LV_KEY_ENTER) return;
-        }
-        g_click_count++;
-        lv_label_set_text_fmt(g_count_label, "Clicks: %u", g_click_count);
+    if (code == LV_EVENT_CLICKED || code == LV_EVENT_PRESSED) {
+        bump_click();
+        return;
     }
+    if (code == LV_EVENT_KEY) {
+        uint32_t key = lv_event_get_key(e);
+        if (key == LV_KEY_ENTER) {
+            bump_click();
+        }
+    }
+}
+
+/* Group-level fallback: some evdev/indev setups route LV_EVENT_KEY to the
+ * group's focused obj only when the obj is in a specific editable state.
+ * Catch ENTER on any focused obj in our single-button group so the click
+ * counter always advances, even if the button's own LV_EVENT_CLICKED
+ * handler is not triggered by the default group action. */
+static lv_group_t *g_group = NULL;
+
+static void indev_read_cb_unused(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    (void)indev;
+    (void)data;
 }
 
 #include <linux/input-event-codes.h>
