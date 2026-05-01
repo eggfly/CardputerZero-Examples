@@ -36,7 +36,7 @@ endif()
 target_compile_definitions(lvgl PUBLIC
     LV_CONF_INCLUDE_SIMPLE=1
     LV_USE_LINUX_FBDEV=1
-    LV_USE_LINUX_EVDEV=1
+    LV_USE_EVDEV=1
 )
 
 # Make our lv_conf.h visible to LVGL and to this project.

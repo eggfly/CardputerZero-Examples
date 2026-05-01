@@ -34,8 +34,9 @@
 #endif
 #define LV_LINUX_FBDEV_BSD        0
 
-#ifndef LV_USE_LINUX_EVDEV
-#define LV_USE_LINUX_EVDEV        1
+/* v9.2.2 renamed the evdev driver guard to LV_USE_EVDEV (non-linux prefix). */
+#ifndef LV_USE_EVDEV
+#define LV_USE_EVDEV              1
 #endif
 
 #define LV_FONT_MONTSERRAT_12     1
