@@ -1,8 +1,49 @@
 #!/usr/bin/env python3
+import atexit
+import os
+import struct
 import sys
+import fcntl
+
 from PyQt5.QtCore import Qt, QTimer, QDateTime
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
 from PyQt5.QtGui import QFont
+
+FBIOGET_VSCREENINFO = 0x4600
+FBIOGET_FSCREENINFO = 0x4602
+
+
+def _blank_fb(path="/dev/fb0"):
+    """Write zeros over the framebuffer so APPLaunch's resumed UI is visible
+    immediately after we exit. We never hardcode resolution: read vinfo/finfo
+    and zero exactly smem_len bytes."""
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError as exc:
+        print("[hello_pyqt5] fb open failed: {}".format(exc), file=sys.stderr)
+        return
+    try:
+        vbuf = bytearray(160)
+        fcntl.ioctl(fd, FBIOGET_VSCREENINFO, vbuf)
+        xres, yres, _xv, _yv, _xo, _yo, bpp, _gray = struct.unpack_from("8I", vbuf, 0)
+        fbuf = bytearray(struct.calcsize("16sL" + "I" * 6 + "HHHI"))
+        fcntl.ioctl(fd, FBIOGET_FSCREENINFO, fbuf)
+        fields = struct.unpack("16sL" + "I" * 6 + "HHHI", bytes(fbuf))
+        smem_len = fields[2]
+        # Fall back to xres*yres*(bpp/8) if smem_len looks bogus.
+        need = smem_len or (xres * yres * max(1, bpp // 8))
+        os.lseek(fd, 0, os.SEEK_SET)
+        zero = b"\x00" * 4096
+        remaining = need
+        while remaining > 0:
+            n = os.write(fd, zero if remaining >= 4096 else zero[:remaining])
+            if n <= 0:
+                break
+            remaining -= n
+    except Exception as exc:
+        print("[hello_pyqt5] fb blank failed: {}".format(exc), file=sys.stderr)
+    finally:
+        os.close(fd)
 
 
 def ensure_platform():
@@ -69,6 +110,8 @@ class HelloWindow(QWidget):
 
 def main():
     print("[hello_pyqt5] launching on 320x170 linuxfb", file=sys.stderr)
+    # Register BEFORE QApplication so it runs after Qt tears down.
+    atexit.register(_blank_fb)
     ensure_platform()
     app = QApplication(sys.argv)
     w = HelloWindow()

@@ -4,18 +4,41 @@ export component AppWindow inherits Window {
     background: black;
     default-font-size: 14px;
 
-    Text {
-        text: "Hello, CardputerZero";
-        color: white;
-        x: (parent.width - self.width) / 2;
-        y: 40px;
+    // Signal fired when the user wants to quit (Esc / Q).
+    callback quit();
+
+    // FocusScope captures keyboard events at the root so we don't need a
+    // focused widget. Without this, the linuxkms-noseat backend never
+    // delivers ESC to the app (there's no window-close key binding).
+    fs := FocusScope {
+        width: 100%;
+        height: 100%;
+
+        key-pressed(event) => {
+            if (event.text == Key.Escape || event.text == "q" || event.text == "Q") {
+                root.quit();
+                return accept;
+            }
+            return reject;
+        }
+
+        Text {
+            text: "Hello, CardputerZero";
+            color: white;
+            x: (parent.width - self.width) / 2;
+            y: 40px;
+        }
+
+        Text {
+            text: "Press ESC to quit";
+            color: #888;
+            font-size: 10px;
+            x: 8px;
+            y: 150px;
+        }
     }
 
-    Text {
-        text: "Press ESC to quit";
-        color: #888;
-        font-size: 10px;
-        x: 8px;
-        y: 150px;
+    init => {
+        fs.focus();
     }
 }

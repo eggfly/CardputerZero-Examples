@@ -1,15 +1,20 @@
 /* Demo_2048: keyboard-driven 2048 on 320x170 fb0.
  * 4x4 grid occupies 160x160 on the left, score strip on right 160x170.
- * Arrow keys slide, R reset, Esc quit. fb/input pattern mirrors
- * ../FrameBuffer_Game.
+ * Arrow keys (or HJKL) slide, R reset, Esc quit.
  *
- * This is a working skeleton: rendering, board state, slide/merge
- * logic are implemented; evdev key handling is stubbed with stdin for
- * portability and noted as TODO.
+ * Input is read from an evdev keypad device. We prefer the stable
+ * by-path link (Cardputer i2c keypad), then fall back to scanning
+ * /dev/input/event* for a KEY-capable device that is NOT a mouse/CEC
+ * (i.e. no EV_REL), skipping the HDMI CEC pseudo-keyboard on event0.
  */
 
+#define _POSIX_C_SOURCE 200809L
+
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +33,10 @@
 #define GRID 4
 #define BOARD_PX 160
 #define CELL (BOARD_PX / GRID)
+
+#define BITS_PER_LONG (8 * (int)sizeof(long))
+#define NBITS(x) (((x) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+#define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
 
 static uint16_t *fb;
 static int board[GRID][GRID];
@@ -183,11 +192,92 @@ static void draw(void) {
     draw_str(175, 150, "HJKL move", 1, rgb565(160, 160, 160));
 }
 
-/* TODO: replace with evdev for Cardputer keys. Uses stdin for now. */
-static int read_key_blocking(void) {
-    unsigned char c;
-    if (read(STDIN_FILENO, &c, 1) != 1) return -1;
-    return c;
+/* ---- evdev input ---- */
+
+/* Open an evdev keypad device. Preference order:
+ *   1. $INPUT_DEV env var if set
+ *   2. /dev/input/by-path/platform-3f804000.i2c-event (Cardputer keypad)
+ *   3. scan /dev/input/event*, prefer EV_KEY-capable devices without EV_REL
+ *      (skips HDMI CEC pseudo-keyboard on event0 which has EV_REL/mouse bits).
+ */
+static int open_keypad(void) {
+    const char *env = getenv("INPUT_DEV");
+    if (env && *env) {
+        int fd = open(env, O_RDONLY);
+        if (fd >= 0) return fd;
+    }
+    int fd = open("/dev/input/by-path/platform-3f804000.i2c-event", O_RDONLY);
+    if (fd >= 0) return fd;
+
+    DIR *d = opendir("/dev/input");
+    if (!d) return -1;
+    struct dirent *e;
+    int best = -1;
+    while ((e = readdir(d)) != NULL) {
+        if (strncmp(e->d_name, "event", 5) != 0) continue;
+        char path[64];
+        snprintf(path, sizeof(path), "/dev/input/%s", e->d_name);
+        int cand = open(path, O_RDONLY);
+        if (cand < 0) continue;
+
+        unsigned long evbits[NBITS(EV_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(0, sizeof(evbits)), evbits) < 0) {
+            close(cand); continue;
+        }
+        if (!TEST_BIT(EV_KEY, evbits)) { close(cand); continue; }
+        /* Reject mouse-like / HDMI CEC (has EV_REL). */
+        if (TEST_BIT(EV_REL, evbits)) { close(cand); continue; }
+
+        /* Require KEY_ENTER or KEY_ESC to confirm it's a real keyboard. */
+        unsigned long keybits[NBITS(KEY_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0 &&
+            (TEST_BIT(KEY_ENTER, keybits) || TEST_BIT(KEY_ESC, keybits))) {
+            best = cand;
+            break;
+        }
+        close(cand);
+    }
+    closedir(d);
+    return best;
+}
+
+/* Translate an evdev KEY_* code into the logical action char used by the
+ * game loop. Returns 0 on unhandled. */
+static int key_to_action(int code) {
+    switch (code) {
+        case KEY_ESC:      return 27;
+        case KEY_LEFT:
+        case KEY_H:
+        case KEY_A:        return 'h';
+        case KEY_RIGHT:
+        case KEY_L:
+        case KEY_D:        return 'l';
+        case KEY_UP:
+        case KEY_K:
+        case KEY_W:        return 'k';
+        case KEY_DOWN:
+        case KEY_J:
+        case KEY_S:        return 'j';
+        case KEY_R:        return 'r';
+        default:           return 0;
+    }
+}
+
+/* Block until a relevant key press (value==1 or 2 for autorepeat). */
+static int read_key_blocking(int fd) {
+    struct input_event ev;
+    for (;;) {
+        ssize_t n = read(fd, &ev, sizeof(ev));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        if (n != (ssize_t)sizeof(ev)) return -1;
+        if (ev.type != EV_KEY) continue;
+        if (ev.value == 0) continue; /* release */
+        int k = key_to_action(ev.code);
+        if (k) return k;
+    }
 }
 
 int main(void) {
@@ -199,22 +289,34 @@ int main(void) {
     fb = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (fb == MAP_FAILED) { perror("mmap"); close(fd); return 1; }
 
+    int kfd = open_keypad();
+    if (kfd < 0) {
+        fprintf(stderr, "demo-2048: no keypad found under /dev/input\n");
+        /* Still render the board so the user sees *something*. */
+    }
+
     srand((unsigned)time(NULL));
     reset_board();
     draw();
 
-    for (;;) {
-        int k = read_key_blocking();
-        if (k < 0) break;
-        int moved = 0;
-        if (k == 27) break;
-        else if (k == 'h') moved = move_left();
-        else if (k == 'l') moved = move_right();
-        else if (k == 'k') moved = move_up();
-        else if (k == 'j') moved = move_down();
-        else if (k == 'r' || k == 'R') { reset_board(); moved = 0; }
-        if (moved) spawn();
-        draw();
+    if (kfd >= 0) {
+        for (;;) {
+            int k = read_key_blocking(kfd);
+            if (k < 0) break;
+            int moved = 0;
+            if (k == 27) break;
+            else if (k == 'h') moved = move_left();
+            else if (k == 'l') moved = move_right();
+            else if (k == 'k') moved = move_up();
+            else if (k == 'j') moved = move_down();
+            else if (k == 'r' || k == 'R') { reset_board(); moved = 0; }
+            if (moved) spawn();
+            draw();
+        }
+        close(kfd);
+    } else {
+        /* No keypad: idle so the user at least sees the rendered board. */
+        for (;;) sleep(60);
     }
 
     munmap(fb, bytes);

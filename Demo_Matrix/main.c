@@ -1,9 +1,23 @@
 /* Demo_Matrix: green "matrix rain" screensaver on /dev/fb0 320x170.
- * ~20 columns of 16px wide (8x8 font scaled 2x). Press any key to quit.
+ * ~20 columns of 16px wide (8x8 font scaled 2x). Press any key on the
+ * Cardputer keypad (or Esc) to quit.
+ *
+ * Input is read from an evdev keypad device (non-blocking). Reading
+ * stdin is not reliable when launched under APPLaunch (no controlling
+ * tty), so we probe /dev/input for a real keyboard.
  */
 
+#define _POSIX_C_SOURCE 200809L
+/* usleep(3) is a legacy BSD API removed from POSIX.1-2008 but still
+ * provided by glibc under _DEFAULT_SOURCE / _XOPEN_SOURCE. Without it
+ * a strict -std=c11 build (like the on-device Debian 13 gcc) fails
+ * with "implicit declaration of 'usleep'". Use nanosleep() below. */
+
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +26,6 @@
 #include <sys/mman.h>
 #include <sys/select.h>
 #include <time.h>
-#include <termios.h>
 #include <unistd.h>
 
 #include "font8x8_basic.h"
@@ -24,6 +37,10 @@
 #define CHAR_H 16
 #define COLS (W / CHAR_W)     /* 20 */
 #define ROWS (H / CHAR_H + 1) /* 11 */
+
+#define BITS_PER_LONG (8 * (int)sizeof(long))
+#define NBITS(x) (((x) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+#define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
 
 static uint16_t *fb;
 
@@ -67,12 +84,63 @@ static char rand_glyph(void) {
     return set[rand() % (int)strlen(set)];
 }
 
-static int key_pressed(void) {
-    struct timeval tv = {0, 0};
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+/* Open an evdev keypad device (non-blocking). Same discovery logic as
+ * Demo_2048: env override, Cardputer by-path, then scan, rejecting
+ * HDMI CEC (has EV_REL) and devices without KEY_ESC/KEY_ENTER. */
+static int open_keypad(void) {
+    const char *env = getenv("INPUT_DEV");
+    if (env && *env) {
+        int fd = open(env, O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) return fd;
+    }
+    int fd = open("/dev/input/by-path/platform-3f804000.i2c-event",
+                  O_RDONLY | O_NONBLOCK);
+    if (fd >= 0) return fd;
+
+    DIR *d = opendir("/dev/input");
+    if (!d) return -1;
+    struct dirent *e;
+    int best = -1;
+    while ((e = readdir(d)) != NULL) {
+        if (strncmp(e->d_name, "event", 5) != 0) continue;
+        char path[64];
+        snprintf(path, sizeof(path), "/dev/input/%s", e->d_name);
+        int cand = open(path, O_RDONLY | O_NONBLOCK);
+        if (cand < 0) continue;
+
+        unsigned long evbits[NBITS(EV_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(0, sizeof(evbits)), evbits) < 0) {
+            close(cand); continue;
+        }
+        if (!TEST_BIT(EV_KEY, evbits)) { close(cand); continue; }
+        if (TEST_BIT(EV_REL, evbits)) { close(cand); continue; }
+
+        unsigned long keybits[NBITS(KEY_MAX)] = {0};
+        if (ioctl(cand, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0 &&
+            (TEST_BIT(KEY_ENTER, keybits) || TEST_BIT(KEY_ESC, keybits))) {
+            best = cand;
+            break;
+        }
+        close(cand);
+    }
+    closedir(d);
+    return best;
+}
+
+/* Non-blocking: return 1 if a key press was observed since last call. */
+static int key_pressed(int kfd) {
+    if (kfd < 0) return 0;
+    struct input_event ev;
+    int got = 0;
+    for (;;) {
+        ssize_t n = read(kfd, &ev, sizeof(ev));
+        if (n == (ssize_t)sizeof(ev)) {
+            if (ev.type == EV_KEY && ev.value == 1) got = 1;
+            continue;
+        }
+        break;
+    }
+    return got;
 }
 
 int main(void) {
@@ -84,12 +152,8 @@ int main(void) {
     fb = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (fb == MAP_FAILED) { perror("mmap"); close(fd); return 1; }
 
-    /* raw stdin for key detection */
-    struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    int kfd = open_keypad();
+    /* If no keypad, still animate — user can SIGINT / kill to exit. */
 
     srand((unsigned)time(NULL));
     for (int i = 0; i < COLS; i++) {
@@ -104,7 +168,7 @@ int main(void) {
     uint16_t BRIGHT = rgb565(200, 255, 200);
 
     for (;;) {
-        if (key_pressed()) break;
+        if (key_pressed(kfd)) break;
 
         for (int c = 0; c < COLS; c++) {
             /* dim trail: redraw column faded */
@@ -125,10 +189,14 @@ int main(void) {
             }
             tick++;
         }
-        usleep(80 * 1000);
+        /* ~80 ms frame delay using POSIX nanosleep (usleep was removed
+         * from POSIX.1-2008 and won't compile under -std=c11 with only
+         * _POSIX_C_SOURCE defined). */
+        struct timespec ts = { .tv_sec = 0, .tv_nsec = 80L * 1000 * 1000 };
+        nanosleep(&ts, NULL);
     }
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    if (kfd >= 0) close(kfd);
     munmap(fb, bytes);
     close(fd);
     return 0;

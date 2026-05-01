@@ -2,13 +2,18 @@
 """Demo_MarkdownReader: paged text reader for .md files on /dev/fb0.
 
 Usage: reader.py <file.md>
-Keys: Space next page, b previous, Esc quit.
-Rendering is monospaced/mono-color; markdown formatting is not parsed.
+
+Keys (evdev):
+  Space / Down / PageDown / J / N - next page
+  B     / Up   / PageUp   / K / P - previous page
+  Esc   / Q                       - quit
 """
 
+import glob
 import mmap
 import os
 import select
+import struct
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
@@ -22,6 +27,25 @@ LINE_H = 13
 MARGIN = 4
 LINES_PER_PAGE = (H - MARGIN * 2 - 14) // LINE_H  # reserve footer
 MAX_COLS = 48
+
+# Linux input_event: long tv_sec, long tv_usec, u16 type, u16 code, s32 value
+EV_FORMAT = "llHHi"
+EV_SIZE = struct.calcsize(EV_FORMAT)
+EV_KEY = 0x01
+
+# Keycodes from <linux/input-event-codes.h>
+KEY_ESC = 1
+KEY_Q = 16
+KEY_B = 48
+KEY_J = 36
+KEY_K = 37
+KEY_N = 49
+KEY_P = 25
+KEY_SPACE = 57
+KEY_UP = 103
+KEY_DOWN = 108
+KEY_PAGEUP = 104
+KEY_PAGEDOWN = 109
 
 
 def rgb565(r, g, b):
@@ -78,11 +102,54 @@ def render(page, idx, total, font, font_sm):
     return img
 
 
-def read_key():
-    dr, _, _ = select.select([sys.stdin], [], [], 0.2)
-    if not dr:
-        return ""
-    return sys.stdin.read(1)
+def open_input_devices():
+    """Open all /dev/input/event* nodes non-blocking."""
+    fds = []
+    env = os.environ.get("INPUT_DEV", "").strip()
+    candidates = []
+    if env:
+        candidates.append(env)
+    candidates.extend(sorted(glob.glob("/dev/input/event*")))
+    seen = set()
+    for path in candidates:
+        try:
+            real = os.path.realpath(path)
+        except OSError:
+            real = path
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        except OSError:
+            continue
+        fds.append(fd)
+    return fds
+
+
+def read_keycodes(fds, timeout=0.2):
+    """Return list of keycodes newly pressed (value==1)."""
+    pressed = []
+    if not fds:
+        return pressed
+    try:
+        dr, _, _ = select.select(fds, [], [], timeout)
+    except (OSError, ValueError):
+        return pressed
+    for fd in dr:
+        try:
+            data = os.read(fd, EV_SIZE * 64)
+        except BlockingIOError:
+            continue
+        except OSError:
+            continue
+        for off in range(0, len(data) - EV_SIZE + 1, EV_SIZE):
+            _sec, _usec, etype, code, value = struct.unpack(
+                EV_FORMAT, data[off:off + EV_SIZE]
+            )
+            if etype == EV_KEY and value == 1:
+                pressed.append(code)
+    return pressed
 
 
 def main():
@@ -101,27 +168,47 @@ def main():
     fd = os.open(FB_DEV, os.O_RDWR)
     mm = mmap.mmap(fd, W * H * BPP, mmap.MAP_SHARED, mmap.PROT_WRITE | mmap.PROT_READ)
 
+    input_fds = open_input_devices()
+
+    next_keys = {KEY_SPACE, KEY_DOWN, KEY_PAGEDOWN, KEY_J, KEY_N}
+    prev_keys = {KEY_B, KEY_UP, KEY_PAGEUP, KEY_K, KEY_P}
+    quit_keys = {KEY_ESC, KEY_Q}
+
     try:
+        # initial render
+        img = render(pages[idx], idx, len(pages), font, font_sm)
+        mm.seek(0)
+        mm.write(image_to_rgb565(img))
+
         while True:
-            img = render(pages[idx], idx, len(pages), font, font_sm)
-            mm.seek(0)
-            mm.write(image_to_rgb565(img))
-            k = ""
-            while not k:
-                k = read_key()
-            if k == "\x1b":
-                break
-            elif k == " ":
-                if idx + 1 < len(pages):
-                    idx += 1
-            elif k in ("b", "B"):
-                if idx > 0:
-                    idx -= 1
+            codes = read_keycodes(input_fds, timeout=0.2)
+            if not codes:
+                continue
+            dirty = False
+            for code in codes:
+                if code in quit_keys:
+                    return 0
+                if code in next_keys:
+                    if idx + 1 < len(pages):
+                        idx += 1
+                        dirty = True
+                elif code in prev_keys:
+                    if idx > 0:
+                        idx -= 1
+                        dirty = True
+            if dirty:
+                img = render(pages[idx], idx, len(pages), font, font_sm)
+                mm.seek(0)
+                mm.write(image_to_rgb565(img))
     finally:
+        for ifd in input_fds:
+            try:
+                os.close(ifd)
+            except OSError:
+                pass
         mm.close()
         os.close(fd)
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main() or 0)

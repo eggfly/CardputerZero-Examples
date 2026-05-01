@@ -15,4 +15,4 @@ trap cleanup EXIT INT TERM
 export DISPLAY=:1
 sleep 0.5
 
-sudo -E python3 hello_tk.py --mirror-to-fb
+python3 hello_tk.py --mirror-to-fb

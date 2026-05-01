@@ -6,7 +6,10 @@ thread grabs the root window via PIL.ImageGrab and blits RGB565 to /dev/fb0.
 """
 
 import argparse
+import atexit
+import fcntl
 import os
+import struct
 import sys
 import threading
 import time
@@ -14,6 +17,38 @@ import tkinter as tk
 from datetime import datetime
 
 W, H = 320, 170
+
+FBIOGET_VSCREENINFO = 0x4600
+FBIOGET_FSCREENINFO = 0x4602
+
+
+def _blank_fb(path="/dev/fb0"):
+    """Zero /dev/fb0 on exit so APPLaunch's resumed screen shows without
+    waiting for a left/right key to trigger repaint."""
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return
+    try:
+        vbuf = bytearray(160)
+        fcntl.ioctl(fd, FBIOGET_VSCREENINFO, vbuf)
+        xres, yres, _xv, _yv, _xo, _yo, bpp, _g = struct.unpack_from("8I", vbuf, 0)
+        fmt = "16sL" + "I" * 6 + "HHHI"
+        fbuf = bytearray(struct.calcsize(fmt))
+        fcntl.ioctl(fd, FBIOGET_FSCREENINFO, fbuf)
+        smem_len = struct.unpack(fmt, bytes(fbuf))[2]
+        need = smem_len or xres * yres * max(1, bpp // 8)
+        os.lseek(fd, 0, 0)
+        z = b"\x00" * 4096
+        while need > 0:
+            n = os.write(fd, z if need >= 4096 else z[:need])
+            if n <= 0:
+                break
+            need -= n
+    except Exception:
+        pass
+    finally:
+        os.close(fd)
 
 
 def _start_fb_mirror(display, fps=15):
@@ -95,6 +130,8 @@ def build_ui():
 
 
 def main():
+    atexit.register(_blank_fb)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--mirror-to-fb", action="store_true",
                         help="mirror root window to /dev/fb0 via PIL+mmap")

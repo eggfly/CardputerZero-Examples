@@ -29,7 +29,21 @@ static void btn_event_cb(lv_event_t *e)
     }
 }
 
-/* Scan /dev/input/event* for the first device with EV_KEY support. */
+#include <linux/input-event-codes.h>
+
+#define BITS_PER_LONG (8 * (int)sizeof(long))
+#define NBITS(x) (((x) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+#define TEST_BIT(bit, arr) ((arr)[(bit) / BITS_PER_LONG] & (1UL << ((bit) % BITS_PER_LONG)))
+
+/* Scan /dev/input/event* for a real keyboard-style device.
+ *
+ * We reject anything that also reports EV_REL, which filters out the
+ * vc4-hdmi CEC pseudo-keyboard at event0 (reports EV_KEY + EV_REL but
+ * never actually emits key events from the Cardputer keypad). We also
+ * require KEY_ENTER or KEY_ESC in the supported key bitmap so we only
+ * pick a device that can actually dispatch the keys this app cares
+ * about.
+ */
 static int find_keypad_event_path(char *out, size_t out_sz)
 {
     DIR *d = opendir("/dev/input");
@@ -45,14 +59,21 @@ static int find_keypad_event_path(char *out, size_t out_sz)
         int fd = open(path, O_RDONLY | O_NONBLOCK);
         if (fd < 0) continue;
 
-        unsigned long evbits[(EV_MAX + 8 * sizeof(long) - 1) / (8 * sizeof(long))] = {0};
-        if (ioctl(fd, EVIOCGBIT(0, sizeof(evbits)), evbits) >= 0) {
-            if (evbits[EV_KEY / (8 * sizeof(long))] & (1UL << (EV_KEY % (8 * sizeof(long))))) {
-                snprintf(out, out_sz, "%s", path);
-                found = 0;
-                close(fd);
-                break;
-            }
+        unsigned long evbits[NBITS(EV_MAX)] = {0};
+        if (ioctl(fd, EVIOCGBIT(0, sizeof(evbits)), evbits) < 0) {
+            close(fd); continue;
+        }
+        if (!TEST_BIT(EV_KEY, evbits)) { close(fd); continue; }
+        /* Reject mouse/CEC remote (event0 on Pi has EV_REL). */
+        if (TEST_BIT(EV_REL, evbits)) { close(fd); continue; }
+
+        unsigned long keybits[NBITS(KEY_MAX)] = {0};
+        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0 &&
+            (TEST_BIT(KEY_ENTER, keybits) || TEST_BIT(KEY_ESC, keybits))) {
+            snprintf(out, out_sz, "%s", path);
+            found = 0;
+            close(fd);
+            break;
         }
         close(fd);
     }
@@ -102,14 +123,34 @@ int main(void)
     lv_linux_fbdev_set_file(disp, "/dev/fb0");
     lv_display_set_resolution(disp, 320, 170);
 
-    /* Keypad input (evdev). Try event0 first, then scan. */
-    lv_indev_t *indev = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, "/dev/input/event0");
-    if (!indev) {
-        char path[64];
-        if (find_keypad_event_path(path, sizeof(path)) == 0) {
-            indev = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, path);
-            if (indev) fprintf(stderr, "evdev: using %s\n", path);
+    /* Keypad input (evdev). Probe order:
+     *   1. $INPUT_DEV env override
+     *   2. /dev/input/by-path/platform-3f804000.i2c-event (Cardputer keypad)
+     *   3. Scan /dev/input/event*, skipping HDMI CEC / mouse-like devices.
+     *
+     * Do NOT blindly try /dev/input/event0 first: on the Pi CM0 that is
+     * vc4-hdmi (CEC) which advertises EV_KEY but never emits the
+     * Cardputer key events, leaving focus unreachable.
+     */
+    const char *kp_env = getenv("INPUT_DEV");
+    char kp_path[64] = {0};
+    if (kp_env && *kp_env) {
+        snprintf(kp_path, sizeof(kp_path), "%s", kp_env);
+    } else {
+        const char *stable = "/dev/input/by-path/platform-3f804000.i2c-event";
+        if (access(stable, R_OK) == 0) {
+            snprintf(kp_path, sizeof(kp_path), "%s", stable);
+        } else {
+            find_keypad_event_path(kp_path, sizeof(kp_path));
         }
+    }
+    lv_indev_t *indev = NULL;
+    if (kp_path[0]) {
+        indev = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, kp_path);
+        if (indev) fprintf(stderr, "evdev: using %s\n", kp_path);
+        else fprintf(stderr, "evdev: failed to open %s\n", kp_path);
+    } else {
+        fprintf(stderr, "evdev: no keypad device found\n");
     }
 
     lv_group_t *group = lv_group_create();
