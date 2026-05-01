@@ -1,7 +1,7 @@
 # CardputerZero 320×170 Example 清单
 
 这个仓库的目标是为 **M5 CardputerZero**（CM Zero + 1.9" ST7789V 320×170 TFT，键盘 + 音频，**无触摸**）
-收集/改写一批"小屏 app"示例，覆盖 FrameBuffer、SDL2、LVGL、Rust、Python、Qt、PyQt、Flutter、GPUI 等多种技术栈。
+收集/改写一批"小屏 app"示例，覆盖 FrameBuffer、SDL2、LVGL、Rust、Python、Qt、PyQt、Slint 等多种技术栈。
 
 ## 设备速查（给所有 example 作者的上下文）
 
@@ -46,12 +46,13 @@
 - [ ] **C3. GTK_HelloWorld**（可选，GTK3/4 + Cairo on fbdev——注意 GTK4 需要 GL）
 - [ ] **C4. ImGui_HelloWorld**（可选，Dear ImGui + SDL2 backend）
 
-### D. 较重型栈（多为 stub/plan，CM0 可能跑不动完整版）
+### D. 较重型栈（CM0 可能跑不动完整版）
 
-- [x] **D1. Flutter_Embedder**（文档 + plan，flutter-pi / flutter-elinux 可行性）
-- [x] **D2. GPUI_Stub**（只可行性文档，CM0 无 GPU）
-- [ ] **D3. Electron / Webview**（可选，`cog`/`wpe-webkit` on fbdev，资源紧）
 - [x] **D4. Slint_HelloWorld**（Rust Slint 1.9 `backend-linuxkms-noseat` + 软件渲染）
+
+> Flutter（flutter-pi / flutter-elinux）与 GPUI 在 CM0 上硬件不足（无 GPU）；
+> Electron / WebView（`cog`/`wpe-webkit`）资源开销过大。已从仓库中移除相关 stub，
+> 不再追踪。
 
 ### E. 创意 Demo（320×170 天然小屏氛围）
 
@@ -100,10 +101,9 @@
 | Qt5 Widgets linuxfb | ⚠️ | 大 | 多 frame | 中 | 需要大量 Qt 库 |
 | PyQt5 linuxfb | ⚠️ | 很大 | 多 frame | 中 | 可行但重 |
 | Slint linuxfb | ✅ | 小 | 1 frame | 中 | 对 320×170 友好，值得试 |
-| Flutter (flutter-pi) | ❌/⚠️ | 很大 | 软光栅很慢 | 高 | 无 GPU，基本只能看 |
-| GPUI (Zed) | ❌ | - | - | - | 需 GPU，CM0 不支持 |
-| GTK4 | ❌ | - | - | - | 需要 GL |
-| Webview / Electron | ⚠️ | 非常大 | 卡 | 高 | 考虑 WPE/Cog |
+
+> 硬件限制：Flutter（flutter-pi/flutter-elinux）、GPUI、GTK4、Webview/Electron
+> 在 CM0 上均不可行（无 GPU / 资源不足），已从本仓库移除。
 
 ## 进度追踪约定
 

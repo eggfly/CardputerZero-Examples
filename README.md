@@ -35,8 +35,6 @@ Driver overlays: <https://github.com/m5stack/m5stack-linux-dtoverlays/tree/main/
 | [Qt_HelloWorld](./Qt_HelloWorld) | C++ Qt5 Widgets | ✅ | `-platform linuxfb`; qmake or CMake. |
 | [PyQt5_HelloWorld](./PyQt5_HelloWorld) | Python PyQt5 | ✅ | `run.sh` sets linuxfb + evdev env. |
 | [Slint_HelloWorld](./Slint_HelloWorld) | Rust Slint 1.9 | ✅ | `backend-linuxkms-noseat` + software renderer. |
-| [Flutter_Embedder](./Flutter_Embedder) | Flutter (flutter-pi / flutter-elinux) | 📄 stub | No GPU on CM0 → feasibility doc + plan only. |
-| [GPUI_Stub](./GPUI_Stub) | Zed GPUI (Rust) | 📄 stub | Requires Vulkan/Metal; CM0 cannot run GPUI. |
 | [Demo_Clock](./Demo_Clock) | C / fb | ✅ | Big-font HH:MM:SS + date. |
 | [Demo_SysDashboard](./Demo_SysDashboard) | Python / fb | ✅ | CPU/mem/temp/IP. |
 | [Demo_WifiScan](./Demo_WifiScan) | Python + `iw` | ✅ | Scrollable SSID list. |
@@ -129,8 +127,7 @@ cd ~/CardputerZero-Examples
 For the fb demos you'll usually need sudo (or `usermod -aG video pi`).
 
 **Do not** try this for `NES_Emulator`, `Qt_HelloWorld`, `Slint_HelloWorld`,
-`Flutter_Embedder`, or anything pulling LVGL via FetchContent — the link step
-will OOM.
+or anything pulling LVGL via FetchContent — the link step will OOM.
 
 ### 3) Cross-build from macOS / x86_64 Linux (via Docker)
 
@@ -237,7 +234,7 @@ ssh pi@<device-ip>
 cd ~/CardputerZero-Examples && ./scripts/pack-deb.sh FrameBuffer_HelloWorld
 ```
 
-`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`、`Flutter_Embedder`
+`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`
 以及任何通过 FetchContent 拉 LVGL 的示例**不要**在设备上编译，链接阶段会 OOM。
 
 **3) macOS / x86_64 交叉编译（Docker + QEMU）**
@@ -321,7 +318,7 @@ ssh pi@<device-ip>
 cd ~/CardputerZero-Examples && ./scripts/pack-deb.sh FrameBuffer_HelloWorld
 ```
 
-`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`、`Flutter_Embedder`
+`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`
 以及任何透過 FetchContent 拉 LVGL 的範例**請勿**在裝置上編譯,連結階段會 OOM。
 
 **3) macOS / x86_64 交叉編譯（Docker + QEMU）**
@@ -407,7 +404,7 @@ ssh pi@<device-ip>
 cd ~/CardputerZero-Examples && ./scripts/pack-deb.sh FrameBuffer_HelloWorld
 ```
 
-`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`、`Flutter_Embedder`、および
+`NES_Emulator`、`Qt_HelloWorld`、`Slint_HelloWorld`、および
 FetchContent 経由で LVGL を取得するサンプルは **実機でビルドしないでください** —
 リンク段階で OOM になります。
 
@@ -463,4 +460,4 @@ python3 firmware_manager.py upload \
 
 See [CHECKLIST.md](./CHECKLIST.md) for what's planned, what's done, and the full
 feasibility table across Framebuffer / SDL2 / LVGL / Rust / Python / Qt / PyQt /
-Flutter / GPUI / Slint on this target.
+Slint on this target.

@@ -88,8 +88,8 @@ Uninstall: `sudo dpkg -r <pkg_name>`.
 3. **release** job — on a published Release, downloads all artifacts and
    attaches the `.deb` files to the release.
 
-Only examples that have a `packaging/meta.env` appear in the matrix. Stubs
-(`Flutter_Embedder`, `GPUI_Stub`) intentionally have none and are skipped.
+Only examples that have a `packaging/meta.env` appear in the matrix — any
+example directory without one is skipped.
 
 ## Adding a new example to CI
 
