@@ -103,3 +103,6 @@ LVGL_HelloWorld/hello_lvgl
 Rust_FrameBuffer_HelloWorld/target/
 Slint_HelloWorld/target/
 NES_Emulator/nes-emulator
+
+# Generated icon previews (run scripts/gen-icons.py to regenerate)
+scripts/generated-icons/
