@@ -22,39 +22,100 @@ Driver overlays: <https://github.com/m5stack/m5stack-linux-dtoverlays/tree/main/
 
 ## Examples index
 
-| Directory | Stack | Status | Notes |
-| --- | --- | --- | --- |
-| [FrameBuffer_HelloWorld](./FrameBuffer_HelloWorld) | C / `/dev/fb0` + evdev | ✅ | Pure C11, no deps. Reads vinfo, supports 16/32 bpp. ESC/Q quits. |
-| [FrameBuffer_Game](./FrameBuffer_Game) | C / fb + evdev | ✅ | Snake, 10 fps, optional `aplay` beep. |
-| [SDL2_HelloWorld](./SDL2_HelloWorld) | C / SDL2 + SDL2_ttf + SDL2_mixer | ✅ | Software renderer, DejaVuSans 14 pt, FPS counter. |
-| [SDL2_Game](./SDL2_Game) | C / SDL2 + mixer | ✅ | Breakout, 60 Hz fixed timestep. |
-| [LVGL_HelloWorld](./LVGL_HelloWorld) | C / LVGL v9.2 | ✅ | CMake FetchContent; `lv_linux_fbdev` + `lv_linux_evdev`. |
-| [Rust_FrameBuffer_HelloWorld](./Rust_FrameBuffer_HelloWorld) | Rust / `framebuffer` + `embedded-graphics` | ✅ | RGB565 + 32 bpp fallback; cross build docs. |
-| [Python_FrameBuffer_HelloWorld](./Python_FrameBuffer_HelloWorld) | Python 3 / mmap + Pillow + numpy | ✅ | Vectorized RGB→RGB565, evdev quit, SIGINT clean. |
-| [Python_Tkinter_HelloWorld](./Python_Tkinter_HelloWorld) | Python 3 / Tkinter + Xvfb | ✅ | Two paths: ffmpeg mirror, or PIL.ImageGrab self-mirror. |
-| [Qt_HelloWorld](./Qt_HelloWorld) | C++ Qt5 Widgets | ✅ | `-platform linuxfb`; qmake or CMake. |
-| [PyQt5_HelloWorld](./PyQt5_HelloWorld) | Python PyQt5 | ✅ | `run.sh` sets linuxfb + evdev env. |
-| [Slint_HelloWorld](./Slint_HelloWorld) | Rust Slint 1.9 | ✅ | `backend-linuxkms-noseat` + software renderer. |
-| [Demo_Clock](./Demo_Clock) | C / fb | ✅ | Big-font HH:MM:SS + date. |
-| [Demo_SysDashboard](./Demo_SysDashboard) | Python / fb | ✅ | CPU/mem/temp/IP. |
-| [Demo_WifiScan](./Demo_WifiScan) | Python + `iw` | ✅ | Scrollable SSID list. |
-| [Demo_ImageViewer](./Demo_ImageViewer) | Python + Pillow | ✅ | ←/→ browse a folder. |
-| [Demo_2048](./Demo_2048) | C / fb | ✅ | 4×4 keyboard 2048. |
-| [Demo_Matrix](./Demo_Matrix) | C / fb | ✅ | Matrix-rain screensaver. |
-| [Demo_MarkdownReader](./Demo_MarkdownReader) | Python + Pillow | ✅ | Paged plain-text reader. |
-| [Demo_MusicSpectrum](./Demo_MusicSpectrum) | C / ALSA + fb | 📄 skeleton | ALSA capture loop done; FFT + render TODO. |
-| [Game_Tetris](./Game_Tetris) | C / fb | ✅ | 10×17 grid, SRS-lite rotation, hard drop. |
-| [Game_Minesweeper](./Game_Minesweeper) | C / fb | ✅ | 20×14 board, 16 mines, flag/reveal. |
-| [Game_Sokoban](./Game_Sokoban) | C / fb | ✅ | 3 built-in levels with undo. |
-| [Game_Pong](./Game_Pong) | C / fb | ✅ | Human vs CPU, first to 10. |
-| [Game_Flappy](./Game_Flappy) | C / fb | ✅ | Flappy Bird clone with pipe gaps. |
-| [Game_LunarLander](./Game_LunarLander) | C / fb | ✅ | Thrust/rotate/gravity, 2 bonus pads. |
-| [Game_Invaders](./Game_Invaders) | C / SDL2 | ✅ | Simplified Space Invaders 5×8 grid. |
-| [Game_Asteroids](./Game_Asteroids) | C / SDL2 | ✅ | Vector asteroids, wraparound edges. |
-| [Game_TicTacToe](./Game_TicTacToe) | C / SDL2 | ✅ | Keyboard cursor + minimax CPU. |
-| [NES_Emulator](./NES_Emulator) | C++ / SDL2 + LaiNES | ✅ | 320×170 viewport: `scaletoheight` letterbox (default) or `cropheight` 1.25× stretch; `V` toggles. |
+Columns: **Framework / Language** — the UI / toolkit layer and source
+language. **Audio** — sound output path (ALSA device, mixer library,
+or `-` if silent). **Screen** — how pixels land on the 320×170 LCD.
+**Keys** — how the app reads the TCA8418 keyboard.
 
-Legend: ✅ runnable · 📄 doc / skeleton only
+The English table below is the canonical inventory; no translations.
+
+| Directory | Framework | Language | Audio | Screen | Keys |
+| --- | --- | --- | --- | --- | --- |
+| [FrameBuffer_HelloWorld](./FrameBuffer_HelloWorld) | raw /dev/fb0 | C11 | — | mmap RGB565 + 32bpp fallback (reads vinfo) | evdev raw |
+| [FrameBuffer_Game](./FrameBuffer_Game) (Snake) | raw /dev/fb0 | C11 | ALSA `aplay` beep | mmap RGB565 | evdev raw |
+| [SDL2_HelloWorld](./SDL2_HelloWorld) | SDL2 + SDL2_ttf + SDL2_mixer | C | SDL2_mixer | SDL2 Wayland backend | SDL2 KeyboardEvent |
+| [SDL2_Game](./SDL2_Game) (Breakout) | SDL2 + SDL2_mixer | C | SDL2_mixer (PCM beeps) | SDL2 Wayland backend | SDL2 KeyboardEvent |
+| [LVGL_HelloWorld](./LVGL_HelloWorld) | LVGL v9.2 | C | — | `lv_linux_fbdev` → /dev/fb0 | `lv_linux_evdev` keypad |
+| [Rust_FrameBuffer_HelloWorld](./Rust_FrameBuffer_HelloWorld) | embedded-graphics | Rust | — | `framebuffer` crate RGB565 | `evdev-rs` |
+| [Python_FrameBuffer_HelloWorld](./Python_FrameBuffer_HelloWorld) | Pillow + numpy | Python 3 | — | `mmap` + vectorized RGB→RGB565 | python-evdev |
+| [Python_Tkinter_HelloWorld](./Python_Tkinter_HelloWorld) | Tkinter + Xvfb | Python 3 | — | Xvfb → ffmpeg / PIL mirror → /dev/fb0 | Tk key bindings |
+| [Qt_HelloWorld](./Qt_HelloWorld) | Qt5 Widgets | C++ | — | Qt `-platform linuxfb` | Qt QKeyEvent |
+| [PyQt5_HelloWorld](./PyQt5_HelloWorld) | Qt5 via PyQt5 | Python 3 | — | Qt `-platform linuxfb` | Qt QKeyEvent |
+| [Slint_HelloWorld](./Slint_HelloWorld) | Slint 1.9 | Rust | — | `backend-linuxkms-noseat` software renderer | Slint KeyEvent |
+| [Demo_Clock](./Demo_Clock) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Demo_SysDashboard](./Demo_SysDashboard) | Pillow | Python 3 | — | mmap RGB565 | python-evdev |
+| [Demo_WifiScan](./Demo_WifiScan) | Pillow + `iw` | Python 3 | — | mmap RGB565 | python-evdev |
+| [Demo_ImageViewer](./Demo_ImageViewer) | Pillow | Python 3 | — | mmap RGB565 | python-evdev |
+| [Demo_2048](./Demo_2048) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Demo_Matrix](./Demo_Matrix) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Demo_MarkdownReader](./Demo_MarkdownReader) | Pillow | Python 3 | — | mmap RGB565 | python-evdev |
+| [Demo_MusicSpectrum](./Demo_MusicSpectrum) | raw /dev/fb0 + ALSA | C | ALSA capture (input; any `plughw:*`) | mmap RGB565 | evdev raw |
+| [Game_Tetris](./Game_Tetris) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_Minesweeper](./Game_Minesweeper) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_Sokoban](./Game_Sokoban) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_Pong](./Game_Pong) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_Flappy](./Game_Flappy) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_LunarLander](./Game_LunarLander) | raw /dev/fb0 | C | — | mmap RGB565 | evdev raw |
+| [Game_Invaders](./Game_Invaders) | SDL2 | C | — | SDL2 Wayland backend | SDL2 KeyboardEvent |
+| [Game_Asteroids](./Game_Asteroids) | SDL2 | C | — | SDL2 Wayland backend | SDL2 KeyboardEvent |
+| [Game_TicTacToe](./Game_TicTacToe) | SDL2 | C | — | SDL2 Wayland backend | SDL2 KeyboardEvent |
+| [NES_Emulator](./NES_Emulator) | SDL2 + LaiNES | C++ | SDL2 audio (emulator) | SDL2 Wayland backend (`scaletoheight` letterbox / `cropheight` stretch; `V` toggles) | SDL2 KeyboardEvent |
+
+> **SDL2 backend note.** The board runs `labwc` as a Wayland compositor
+> that holds DRM master, so SDL2's default `KMSDRM` driver fails with
+> `KMSDRM not available`. Every SDL2 example wrapper exports
+> `SDL_VIDEODRIVER=wayland` (plus `WAYLAND_DISPLAY` / `XDG_RUNTIME_DIR`);
+> the Wayland surface is then mirrored onto `/dev/fb0` by the system's
+> `grim | ppm2fb` loop.
+>
+> **Keyboard device.** `/dev/input/by-path/platform-3f804000.i2c-event`
+> (TCA8418 keypad). User `pi` is in the `input` and `video` groups, so
+> no `sudo` is needed to read evdev or write `/dev/fb0`.
+
+### Device status (snapshot)
+
+Measured by launching each example under APPLaunch on a real
+CardputerZero. `Launch` = reaches first frame. `Keys` = navigation
+keys work. `ESC` = a single short-press exits in under a second.
+
+🟢 works · ⚠️ partial · 🔴 broken
+
+| # | Example | Launch | Keys | ESC | Note |
+|---|---|:---:|:---:|:---:|---|
+| 1 | FrameBuffer_HelloWorld | 🟢 | 🟢 | 🟢 | |
+| 2 | FrameBuffer_Game (Snake) | 🟢 | 🟢 | 🟢 | |
+| 3 | SDL2_HelloWorld | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+| 4 | SDL2_Game (Breakout) | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+| 5 | LVGL_HelloWorld | 🟢 | ⚠️ | 🟢 | Enter not routed to button (`lv_group` wiring) |
+| 6 | Rust_FrameBuffer_HelloWorld | 🟢 | 🟢 | 🟢 | |
+| 7 | Python_FrameBuffer_HelloWorld | 🟢 | 🟢 | 🟢 | |
+| 8 | Python_Tkinter_HelloWorld | 🟢 | 🟢 | 🟢 | blanks fb0 on exit (residue fixed) |
+| 9 | Qt_HelloWorld | 🟢 | 🟢 | 🟢 | |
+| 10 | PyQt5_HelloWorld | 🟢 | 🟢 | 🟢 | blanks fb0 on exit (residue fixed) |
+| 11 | Slint_HelloWorld | 🟢 | 🟢 | 🔴 | no window-level Escape handler |
+| 12 | Demo_Clock | 🟢 | 🟢 | 🟢 | |
+| 13 | Demo_SysDashboard | 🟢 | 🟢 | 🟢 | |
+| 14 | Demo_WifiScan | 🟢 | 🟢 | 🔴 | ESC not in evdev switch |
+| 15 | Demo_ImageViewer | 🟢 | 🟢 | 🟢 | fixed: dropped `sudo` wrapper |
+| 16 | Demo_2048 | 🔴 | — | — | crashes on launch |
+| 17 | Demo_Matrix | 🔴 | — | — | crashes on launch |
+| 18 | Demo_MarkdownReader | 🟢 | 🔴 | 🔴 | reads stdin, no TTY under APPLaunch |
+| 19 | Demo_MusicSpectrum | 🟢 | 🟢 | 🟢 | fixed: enumerate ALSA capture, fall back to `plughw:*` |
+| 20 | Game_Tetris | 🟢 | 🟢 | 🟢 | |
+| 21 | Game_Minesweeper | 🟢 | 🟢 | 🟢 | |
+| 22 | Game_Sokoban | 🟢 | 🟢 | 🟢 | |
+| 23 | Game_Pong | 🟢 | 🟢 | 🟢 | |
+| 24 | Game_Flappy | 🟢 | 🟢 | 🟢 | |
+| 25 | Game_LunarLander | 🟢 | 🟢 | 🟢 | |
+| 26 | Game_Invaders | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+| 27 | Game_Asteroids | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+| 28 | Game_TicTacToe | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+| 29 | NES_Emulator | 🟢 | 🟢 | 🟢 | fixed: `SDL_VIDEODRIVER=wayland` |
+
+Remaining broken: Demo_2048, Demo_Matrix (both C fb crashers, cause
+under investigation), Demo_MarkdownReader (needs to read evdev
+instead of stdin), Slint_HelloWorld ESC, LVGL_HelloWorld Enter
+routing.
 
 ## Packaging &amp; CI
 
